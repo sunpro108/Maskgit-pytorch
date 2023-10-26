@@ -1,1 +1,12 @@
+.ipynb_checkpoints
+*/.ipynb_checkpoints
+__pycache__
+*/__pycache__
+
+saved_img/*
+
+Dataset/*
+!Dataset/.gitkeep
+
+pretrained_maskgit
 
