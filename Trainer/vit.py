@@ -28,7 +28,8 @@ class MaskGIT(Trainer):
         super().__init__(args)
         self.args = args                                                        # Main argument see main.py
         self.patch_size = self.args.img_size // 16                              # Number of vizual token (+1 for the class)
-        self.scaler = torch.cuda.amp.GradScaler()                               # Init Scaler for multi GPUs
+        # self.scaler = torch.cuda.amp.GradScaler()                               # Init Scaler for multi GPUs
+        self.scaler = torch.amp.GradScaler('cuda')
         self.vit = self.get_network("vit")                                      # Load Masked Bidirectional Transformer
         self.ae = self.get_network("autoencoder")                               # Load VQGAN
         self.criterion = self.get_loss("cross_entropy", label_smoothing=0.1)    # Get cross entropy loss
@@ -63,7 +64,7 @@ class MaskGIT(Trainer):
                 if self.args.is_master:
                     print("load ckpt from:", ckpt)
                 # Read checkpoint file
-                checkpoint = torch.load(ckpt, map_location='cpu')
+                checkpoint = torch.load(ckpt, map_location='cpu', weights_only=True)
                 # Update the current epoch and iteration
                 self.args.iter += checkpoint['iter']
                 self.args.global_epoch += checkpoint['global_epoch']
@@ -79,7 +80,7 @@ class MaskGIT(Trainer):
             # Load config
             config = OmegaConf.load(self.args.vqgan_folder + "model.yaml")
             model = VQModel(**config.model.params)
-            checkpoint = torch.load(self.args.vqgan_folder + "last.ckpt", map_location="cpu")["state_dict"]
+            checkpoint = torch.load(self.args.vqgan_folder + "last.ckpt", map_location="cpu", weights_only=True)["state_dict"]
             # Load network
             model.load_state_dict(checkpoint, strict=False)
             model = model.eval()
@@ -185,7 +186,7 @@ class MaskGIT(Trainer):
             # Mask the encoded tokens
             masked_code, mask = self.get_mask_code(code, value=self.args.mask_value)
 
-            with torch.cuda.amp.autocast():                             # half precision
+            with torch.amp.autocast('cuda'):                             # half precision
                 pred = self.vit(masked_code, y, drop_label=drop_label)  # The unmasked tokens prediction
                 # Cross-entropy loss
                 loss = self.criterion(pred.reshape(-1, 1024 + 1), code.view(-1)) / self.args.grad_cum
@@ -362,7 +363,7 @@ class MaskGIT(Trainer):
                 if mask.sum() == 0:  # Break if code is fully predicted
                     break
 
-                with torch.cuda.amp.autocast():  # half precision
+                with torch.amp.autocast('cuda'):  # half precision
                     if w != 0:
                         # Model Prediction
                         logit = self.vit(torch.cat([code.clone(), code.clone()], dim=0),
